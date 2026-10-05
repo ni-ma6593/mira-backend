@@ -1,0 +1,59 @@
+services:
+  api:
+    container_name: mira_api
+    build: .
+    command: npm run dev
+    user: root  # dev only — Dockerfile's non-root `mira` user can hit
+                # permission issues with the bind-mounted host source tree
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      # Container-to-container traffic MUST use the Compose service
+      # name, never 127.0.0.1/localhost (that resolves to the api
+      # container itself, not the mongo/redis containers) — this was
+      # the root cause of "Redis Error: ENOTFOUND redis" style failures
+      # when the fallback host didn't match what was actually reachable.
+      - MONGO_URI=mongodb://mongo:27017/mira
+      - REDIS_URL=redis://redis:6379
+      - ENABLE_SWAGGER=true
+      - KAVENEGAR_API_KEY=733345414D5170784858334A6A4334706B6341554766566F576B6368302F75474A535946564268762F48733D
+      - KAVENEGAR_SENDER=0018018949161
+      - KAVENEGAR_OTP_TEMPLATE=registerverify
+
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mongo:
+    container_name: mira_mongo
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: mira_redis
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
